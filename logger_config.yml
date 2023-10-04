@@ -1,0 +1,30 @@
+version: 1
+
+disable_existing_loggers: false
+
+
+formatters:
+  basic:
+    (): coloredlogs.ColoredFormatter
+    format: '[%(levelname)s]: %(asctime)s - (%(name)s) - %(message)s'
+  file:
+    format: '[%(levelname)s]: %(asctime)s - (%(name)s) - %(message)s'
+    # datefmt: '%H:%M:%S'
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    level: INFO
+    formatter: basic
+    stream: ext://sys.stdout
+  filehandler:
+    class: logging.handlers.RotatingFileHandler
+    level: INFO
+    formatter: file
+    filename: app.log
+    maxBytes: 10485760 # 10MB
+    encoding: utf-8
+
+root:
+  level: NOTSET
+  handlers: [console, filehandler]
