@@ -64,7 +64,6 @@ def swap_filtering(responses: List[Response], orders_list: List[str]):
 
     responses_from_swap["not_found"] = []
     responses_from_swap["found"] = []
-    # responses_from_swap["others"] = []
 
     for response, order in zip(responses, orders_list):
         try:
@@ -72,13 +71,10 @@ def swap_filtering(responses: List[Response], orders_list: List[str]):
         except AttributeError as e:
             logger.error(e)
             data = response
-        # if data['iTotalDisplayRecords'] == 0:
-            # responses_from_swap["not_found"].append((order, data))
         if data['iTotalDisplayRecords'] == 1:
             responses_from_swap["found"].append(order)
         else:
             responses_from_swap["not_found"].append((order, data))
-            # responses_from_swap["others"].append(data)
     return responses_from_swap
 
 
@@ -96,7 +92,7 @@ def main(reports_info:dict, downloader: ReportDownloader, swap_delivery: SwapOrd
     for report_name in RUN_FOR:
         selected_report: dict = reports_info[report_name]
         report_type = selected_report.get('report_type')
-        report_filter = selected_report.get('filter')
+        report_filter = selected_report.get('filters')
 
         raw_content = downloader.get_report(report_type)
         report = Report(raw_content, report_type)
@@ -132,25 +128,25 @@ if __name__ == "__main__":
     reports_info = {
         'hotlink prepaid': {
             'report_type': ReportType('PREPAID'),
-            'filter': [],
+            'filters': [],
         },
         'hotlink postpaid': {
             'report_type': ReportType('POSTPAID', 'hotlink postpaid'),
-            'filter': [
+            'filters': [
                 Filter('Fulfillment_Mode', 'exists', ('Standard Delivery', )),
                 Filter('Order_Delivery_Status', 'notExists', ('fulfilled', )),
             ],
         },
         'maxis postpaid': {
             'report_type': ReportType('POSTPAID', 'maxis postpaid'),
-            'filter': [
+            'filters': [
                 Filter('Fulfillment_Mode', 'exists', ('Standard Delivery', )),
                 Filter('Order_Delivery_Status', 'notExists', ('fulfilled', )),
             ],
         },
         'preorder postpaid instore': {
             'report_type': ReportType('POSTPAID', 'maxis postpaid'),
-            'filter': [
+            'filters': [
                 Filter('Fulfillment_Mode', 'exists', ('In-Store Pickup', )),
                 Filter('Package_Type', 'exists', ('Device + Plan', )),
                 Filter('Order_Type', 'exists', ('Pre Order', )),
