@@ -1,5 +1,5 @@
 from requests import Session
-from requests.exceptions import HTTPError, ConnectionError
+from requests.exceptions import HTTPError, ConnectionError, ReadTimeout, SSLError
 from my_logging import log_setup
 import logging
 import time
@@ -15,11 +15,13 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 wait = 30 # seconds
+timeout_seconds = 120
 
 class Swap(Session):
     """Returns a swap authenticated session."""
     def __init__(self):
         super().__init__()
+        self.retries = 3
         self.headers ={
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
             'Accept-Language': 'en-US,en;q=0.9',
@@ -53,21 +55,30 @@ class Swap(Session):
 
     def login(self):
         try:
-            res = self.post('https://delivery-maxis.swap-asia.com/User/Login', data=self.user_login_data)
+            res = self.post('https://delivery-maxis.swap-asia.com/User/Login', data=self.user_login_data, timeout=timeout_seconds)
             logger.info(f"{res.request.method} {res.url} [status:{res.status_code} request:{res.elapsed.total_seconds():.3f}s]")
             res.raise_for_status()
             if 'Login' in res.url:
                 logger.error('Could not authenticate!')
                 raise SystemExit()
-        except HTTPError as http_error:
-            logger.error(http_error.args[0])
-            raise SystemExit('Could not login.')
+        except (SSLError, HTTPError, ConnectionError) as ssl_error:
+            if self.retries > 0:
+                self.retries -= 1
+                logger.warning(ssl_error.args[0])
+                logger.info(f"Retrying in {wait} seconds")
+                time.sleep(wait)
+                self.login()
+            else:
+                logger.error(ssl_error.args)
+                raise SystemExit('Could not login.')
         else:
             if not res.ok:
                 write_to_file(res.text, 'login_error.html')
                 logger.info('Failed response written to file')
+                raise SystemExit('Could not login.')
             else:
                 logger.info('Login success')
+                self.retries = 3
 
     def initialize(self):
         headers = {'Accept': '*/*',
@@ -89,7 +100,7 @@ class Swap(Session):
             '_': current_milli_time(),
         }
         try:
-            response = self.get('https://delivery-maxis.swap-asia.com/Delivery/ShowData', params=params, headers=headers)
+            response = self.get('https://delivery-maxis.swap-asia.com/Delivery/ShowData', params=params, headers=headers, timeout=timeout_seconds)
             logger.info(f"{response.request.method} {response.url} [status:{response.status_code} request:{response.elapsed.total_seconds():.3f}s]")
             response.raise_for_status()
         except HTTPError as http_error:
@@ -232,11 +243,12 @@ class SwapOrder:
             response = self.swap_session.get(
                 'https://delivery-maxis.swap-asia.com/Delivery/AjaxHandler',
                 params=self.params,
+                timeout=timeout_seconds,
             )
             logger.info(f"{response.request.method} /{order_id} [status:{response.status_code} request:{response.elapsed.total_seconds():.3f}s]")
             response.raise_for_status()
-        except HTTPError as http_error:
-            logger.warning(http_error.args[0])
+        except (HTTPError, ReadTimeout) as req_error:
+            logger.warning(req_error.args[0])
             if self.retries > 0:
                 self.retries -= 1
                 logger.info(f"Waiting for {wait} seconds and retry = {self.retries}...")
@@ -245,7 +257,7 @@ class SwapOrder:
                 return self.get_order(order_id)
             else:
                 self.retries = 3
-                logger.error(f'Could not get details for {order_id} retry = {self.retries}')
+                logger.error(f'Could not get details for {order_id} retry left = {self.retries}')
                 return
         except ConnectionError as connection_error:
             logger.warning(connection_error.args[0])
@@ -255,7 +267,7 @@ class SwapOrder:
                 return self.get_order(order_id)
             else:
                 self.retries = 3
-                logger.error(f'Could not get details for {order_id} retry = {self.retries}')
+                logger.error(f'Could not get details for {order_id} retry left = {self.retries}')
                 return
         self.retries = 3
         return response
