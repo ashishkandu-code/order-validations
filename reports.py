@@ -25,7 +25,7 @@ class ReportType:
 @dataclass
 class Filter:
     columnName: str
-    methodName: Literal['contains', 'exists']
+    methodName: Literal['contains', 'exists', 'notExists']
     filter_texts: Tuple[str]
 
 
@@ -78,15 +78,12 @@ class ReportDownloader:
         elif report_type.planType == 'POSTPAID':
             if report_type.ratePlan == 'hotlink postpaid':
                 return f'hotlink_postpaid_report{self.created_date}.xlsx'
-            elif report_type.planType == 'maxis postpaid':
+            elif report_type.ratePlan == 'maxis postpaid':
                 return f'maxis_postpaid_report{self.created_date}.xlsx'
-        return None
+        return f'{report_type.planType}-{report_type.ratePlan}{self.created_date}.xlsx'
 
     def get_report(self, report_type: ReportType):
         """Pulls the report from cms and returns in bytes."""
-        if self.save_to_disk:
-            filename = self.get_file_name(report_type=report_type)
-            write_bytes_to_file(self.content, filename)
 
         plantype = report_type.planType
         rateplan = report_type.ratePlan
@@ -104,6 +101,9 @@ class ReportDownloader:
             raise SystemExit(error.args[0])
         except ConnectionError as connection_error:
             raise SystemExit(connection_error.args)
+        if self.save_to_disk:
+            filename = self.get_file_name(report_type=report_type)
+            write_bytes_to_file(response.content, filename)
         return response.content
 
 
@@ -140,6 +140,8 @@ class Report:
             self.dataframe = self.dataframe[self.dataframe[filter.columnName].str.contains(filter.filter_texts[0])]
         elif filter.methodName == 'exists':
             self.dataframe = self.dataframe[self.dataframe[filter.columnName].isin(filter.filter_texts)]
+        elif filter.methodName == 'notExists':
+            self.dataframe = self.dataframe[~self.dataframe[filter.columnName].isin(filter.filter_texts)]
         else:
             logger.warning(f'Mehtod {filter.methodName} not supported.')
 
