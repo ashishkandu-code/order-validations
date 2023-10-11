@@ -228,11 +228,3 @@ def swap_order_processing(filter_dates: FilterDates, save_fetched_report: bool):
             logger.info(f"Report generated successfully! {report_path}")
     else:
         logger.info("All orders flown to swap successfully!")
-
-
-if __name__ == "__main__":
-
-    filter_dates = get_filter_dates_input()
-    logger.info(f"Range selected from: {filter_dates.start} - {filter_dates.end}")
-
-    swap_order_processing(filter_dates, save_fetched_report=False)
