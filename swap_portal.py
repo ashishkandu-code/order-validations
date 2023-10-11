@@ -109,7 +109,7 @@ class Swap(Session):
             logger.info('Initialization is success!')
 
 
-class SwapOrder:
+class SwapDeliveryAuthenticatedPage:
     """Prepares Swap Delivery page to check for orders."""
     def __init__(self):
         self.headers = {
