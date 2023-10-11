@@ -1,4 +1,5 @@
 from pathlib import Path
+import pandas as pd
 import json
 import time
 
@@ -45,3 +46,15 @@ def write_bytes_to_file(bytes_text: bytes, filename: Path):
 
 def current_milli_time():
     return round(time.time() * 1000)
+
+
+def generate_xlsx_report(dataframes: dict[str, pd.DataFrame], report_name: str):
+    report_path = reports_dir / report_name
+    try:
+        with pd.ExcelWriter(report_path, 'openpyxl') as writer:
+            for sheet_name, df in dataframes.items():
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
+        return report_path
+    except PermissionError:
+        logger.error(f"Unable to access file {report_path}")
+    return Path('non_existent_file')

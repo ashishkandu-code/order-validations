@@ -1,11 +1,12 @@
 from swap_portal import SwapOrder
 from datetime import datetime, timedelta
+import pandas as pd
 
 from typing import List
 from requests import Response
 
 import logging
-from helper import dump_json_to_file, write_to_file
+from helper import dump_json_to_file, write_to_file, generate_xlsx_report
 from my_logging import log_setup
 from reports import (
     Report,
@@ -22,8 +23,8 @@ logger = logging.getLogger(__name__)
 
 
 REQUIRED_COLUMNS = ('Order_No', 'Order_Delivery_Status', 'Order_Cancellation_Status', 'Package_Type', 'Fulfillment_Mode')
-RUN_FOR = ('hotlink prepaid', 'hotlink postpaid', 'maxis postpaid')
-RUN_FOR = ('preorder postpaid instore', )
+RUN_FOR = ('hotlink prepaid', 'hotlink postpaid', 'maxis postpaid', 'preorder postpaid instore')
+# RUN_FOR = ('preorder postpaid instore', )
 
 
 def validate_date(date_text):
@@ -37,7 +38,7 @@ def validate_date(date_text):
         return date_obj
 
 
-def extract_swap_eligible_orders(report: Report, filters: List[Filter]=[]):
+def extract_swap_eligible_orders(report: Report, filters: List[Filter]=[]) -> list[tuple[str, str]]:
     """
     It displays current report selected columns dataframe and filters order IDs.
     Also renames order IDs starting from either 'HOS' or 'MOS' based on report type.
@@ -47,16 +48,16 @@ def extract_swap_eligible_orders(report: Report, filters: List[Filter]=[]):
             report.filter(filter)
         logger.info('Filters applied!')
 
-    logger.info(f"{report.name} Data\n{report.get_columns_filtered_df(REQUIRED_COLUMNS).count()}")
+    logger.info(f"{report.name} Data\n{report.get_columns_reduced_dataframe(REQUIRED_COLUMNS).count()}")
     order_ids = report.dataframe['Order_No'].values
     if report.report_type.planType == "PREPAID":
-        swap_orders_ids = [order if order.startswith('MOS') else f"HOS{order.split('A')[0]}" for order in order_ids]
+        swap_orders_ids = [(order, order) if order.startswith('MOS') else (f"HOS{order.split('A')[0]}", order) for order in order_ids]
     elif report.report_type.planType == "POSTPAID":
-        swap_orders_ids = [order if order.startswith('MOS') else f"MOS{order.split('A')[0]}" for order in order_ids]
+        swap_orders_ids = [(order, order) if order.startswith('MOS') else (f"MOS{order.split('A')[0]}", order) for order in order_ids]
     return swap_orders_ids
 
 
-def swap_filtering(responses: List[Response], orders_list: List[str]):
+def swap_filtering(responses: List[Response], orders_list: list[tuple[str, str]]) -> dict[str, List[tuple[str, str]]]:
     """
     Filters the orders in responses whether flown to swap or not.
     """
@@ -65,16 +66,16 @@ def swap_filtering(responses: List[Response], orders_list: List[str]):
     responses_from_swap["not_found"] = []
     responses_from_swap["found"] = []
 
-    for response, order in zip(responses, orders_list):
+    for response, order_records in zip(responses, orders_list):
         try:
             data = response.json()
         except AttributeError as e:
             logger.error(e)
             data = response
         if data['iTotalDisplayRecords'] == 1:
-            responses_from_swap["found"].append(order)
+            responses_from_swap["found"].append(order_records)
         else:
-            responses_from_swap["not_found"].append((order, data))
+            responses_from_swap["not_found"].append(order_records)
     return responses_from_swap
 
 
@@ -88,7 +89,8 @@ def save_report(data, report_name):
 
 def main(reports_info:dict, downloader: ReportDownloader, swap_delivery: SwapOrder):
 
-    orders_not_flown_to_swap = []
+    orders_not_flown_to_swap: list[tuple[str, str]] = []
+    dataframes = dict()
     for report_name in RUN_FOR:
         selected_report: dict = reports_info[report_name]
         report_type = selected_report.get('report_type')
@@ -105,8 +107,8 @@ def main(reports_info:dict, downloader: ReportDownloader, swap_delivery: SwapOrd
         pbar = manager.counter(total=total_orders_count, desc=report_name)
 
         responses = []
-        for order_id in orders_to_check:
-            response = swap_delivery.get_order(order_id)
+        for swap_order_id, _ in orders_to_check:
+            response = swap_delivery.get_order(swap_order_id)
             if not response:
                 responses.append({'iTotalDisplayRecords': -1})
             else:
@@ -117,10 +119,24 @@ def main(reports_info:dict, downloader: ReportDownloader, swap_delivery: SwapOrd
 
         orders_not_found = swap_flown_data['not_found']
         if orders_not_found:
-            orders_not_flown_to_swap.extend(list(map(lambda order_tuple: order_tuple[0], orders_not_found)))
-        save_report(swap_flown_data, report_name)
+            orders_not_flown_to_swap.extend(orders_not_found)
+            original_order_ids = list(map(lambda order_tuple: order_tuple[1], orders_not_found))
+            filtered_dataframe = report.get_filtered_dataframe_by_orderNos(original_order_ids)
+            try:
+                df = dataframes[report.name]
+                dataframes[report.name] = pd.concat([df, filtered_dataframe])
+            except KeyError:
+                dataframes[report.name] = filtered_dataframe
+        # save_report(swap_flown_data, report_name)
+
     if orders_not_flown_to_swap:
-        print('\n\nOrders not found in swap:', orders_not_flown_to_swap)
+        logger.info(f"Orders not found in swap: {', '.join(map(lambda x: x[0], orders_not_flown_to_swap))}")
+        report_name_w_ext = f'Report_{datetime.now().strftime("%m_%d_%Y-%H_%M_%S")}.xlsx'
+        report_path = generate_xlsx_report(dataframes, report_name_w_ext)
+        if report_path.exists():
+            logger.info(f"Report generated successfully! {report_path}")
+    else:
+        logger.info("All orders flown to swap successfully!")
 
 
 if __name__ == "__main__":
@@ -175,7 +191,7 @@ if __name__ == "__main__":
     if from_date_comp_obj > to_date_comp_obj:
         raise SystemExit("End datetime cannot be before start datetime!")
 
-    downloader = ReportDownloader(filter_date_from, filter_date_to, True)
+    downloader = ReportDownloader(filter_date_from, filter_date_to, False)
     swap_delivery = SwapOrder()
 
     main(reports_info, downloader, swap_delivery)

@@ -2,6 +2,7 @@ import requests
 from requests.exceptions import HTTPError, ConnectionError
 from dataclasses import dataclass
 from typing import Optional, Tuple, Literal
+from collections.abc import Iterable
 
 import pandas as pd
 import io
@@ -145,5 +146,8 @@ class Report:
         else:
             logger.warning(f'Mehtod {filter.methodName} not supported.')
 
-    def get_columns_filtered_df(self, columns: Tuple[str]) -> pd.DataFrame:
+    def get_columns_reduced_dataframe(self, columns: Tuple[str]) -> pd.DataFrame:
         return self.dataframe.loc[:, columns]
+
+    def get_filtered_dataframe_by_orderNos(self, orders: Iterable[str]) -> pd.DataFrame:
+        return self.dataframe.loc[self.dataframe['Order_No'].isin(orders)]
