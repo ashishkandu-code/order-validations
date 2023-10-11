@@ -92,8 +92,13 @@ class FilterDates:
 
 def extract_swap_eligible_orders(report: Report, filters: list[Filter]=[]) -> list[tuple[str, str]]:
     """
-    It displays current report selected columns dataframe and filters order IDs.
-    Also renames order IDs starting from either 'HOS' or 'MOS' based on report type.
+    It applies filters if filters is not empty and returns list of tuples as following:
+
+    (modified_order_id, original_order_id)
+
+    where 'modified_order_id' is obtained by renaming 'original_order_id' to start from 'HOS' or
+    'MOS' based on report type and remove suffix 'A'.
+    It also logs the current dataframe with selected columns
     """
     if filters:
         for filter in filters:
@@ -131,7 +136,7 @@ def swap_filtering(responses: list[Response], orders_list: list[tuple[str, str]]
     return responses_from_swap
 
 
-def save_report(data, report_name):
+def save_data(data, report_name: str):
     try:
         dump_json_to_file(data, f'{report_name}_{datetime.now().strftime("%m_%d_%Y-%H_%M_%S")}.json')
     except Exception as e:
@@ -172,10 +177,10 @@ def get_report(report_type: ReportType, filter_dates: FilterDates, save_to_disk:
     cached_reports.append(report)
     return report
 
-def main(filter_dates: FilterDates, save_to_disk: bool):
+def swap_order_processing(filter_dates: FilterDates, save_fetched_report: bool):
 
     orders_not_flown_to_swap: list[tuple[str, str]] = []
-    dataframes = dict()
+    dataframes: dict[str, pd.DataFrame] = {}
     swap_delivery_page = SwapDeliveryAuthenticatedPage()
 
     for report_name in RUN_FOR:
@@ -183,7 +188,7 @@ def main(filter_dates: FilterDates, save_to_disk: bool):
         report_type = selected_report_info.report_type
         report_filters = selected_report_info.filters
 
-        report = get_report(report_type, filter_dates, save_to_disk)
+        report = get_report(report_type, filter_dates, save_fetched_report)
         orders_to_check = extract_swap_eligible_orders(report, report_filters)
 
         total_orders_count = len(orders_to_check)
@@ -213,7 +218,7 @@ def main(filter_dates: FilterDates, save_to_disk: bool):
                 dataframes[report.name] = pd.concat([df, filtered_dataframe])
             except KeyError:
                 dataframes[report.name] = filtered_dataframe
-        # save_report(swap_flown_data, report_name)
+        # save_data(swap_flown_data, report_name)
 
     if orders_not_flown_to_swap:
         logger.info(f"Orders not found in swap: {', '.join(map(lambda x: x[0], orders_not_flown_to_swap))}")
@@ -230,4 +235,4 @@ if __name__ == "__main__":
     filter_dates = get_filter_dates_input()
     logger.info(f"Range selected from: {filter_dates.start} - {filter_dates.end}")
 
-    main(filter_dates, save_to_disk=False)
+    swap_order_processing(filter_dates, save_fetched_report=False)
