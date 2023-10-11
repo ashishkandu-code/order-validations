@@ -7,6 +7,7 @@ from collections.abc import Iterable
 import pandas as pd
 import io
 from datetime import datetime
+from filter_dates import FilterDates
 
 from my_logging import log_setup
 import logging
@@ -76,10 +77,10 @@ class ReportDownloader:
 
 
 class Report(ReportDownloader):
-    def __init__(self, report_type: ReportType, filter_date_from, filter_date_to, save_to_disk: bool) -> None:
+    def __init__(self, report_type: ReportType, filter_dates: FilterDates, save_to_disk: bool) -> None:
         super().__init__(
-            filter_date_from=filter_date_from,
-            filter_date_to=filter_date_to,
+            filter_date_from=filter_dates.start,
+            filter_date_to=filter_dates.end,
         )
         self.report_type = report_type
         self.save_to_disk = save_to_disk
@@ -158,3 +159,15 @@ class Report(ReportDownloader):
             filename = self.get_file_name()
             write_bytes_to_file(response.content, filename)
         return response.content
+
+cached_reports: list[Report] = []
+
+def get_report(report_type: ReportType, filter_dates: FilterDates, save_to_disk: bool):
+    """Return report for a given report type and also cache for future use"""
+    for report in cached_reports:
+        if report.report_type == report_type:
+            logger.info('Report found in cache!')
+            return report
+    report = Report(report_type, filter_dates, save_to_disk)
+    cached_reports.append(report)
+    return report

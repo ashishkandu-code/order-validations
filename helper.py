@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 import pandas as pd
 import json
@@ -52,6 +53,14 @@ def write_bytes_to_file(bytes_text: bytes, filename: str):
 def current_milli_time():
     """Returns epoch time in milliseconds."""
     return round(time.time() * 1000)
+
+
+def save_json_data(data, report_name: str):
+    try:
+        dump_json_to_file(data, f'{report_name}_{datetime.now().strftime("%m_%d_%Y-%H_%M_%S")}.json')
+    except Exception as e:
+        logger.exception(e)
+        write_to_file(data, f'{report_name}_error')
 
 
 def generate_xlsx_report(dataframes: dict[str, pd.DataFrame], report_name: str):

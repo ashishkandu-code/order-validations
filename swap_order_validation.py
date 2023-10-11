@@ -1,93 +1,26 @@
-from dataclasses import dataclass
+from filter_dates import FilterDates
 from swap_portal import SwapDeliveryAuthenticatedPage
-from datetime import datetime, timedelta
+from datetime import datetime
 import pandas as pd
 
 from requests import Response
 
 import logging
-from helper import dump_json_to_file, write_to_file, generate_xlsx_report
+from helper import generate_xlsx_report
 from my_logging import log_setup
 from reports import (
     Report,
-    ReportType,
     Filter,
+    get_report,
 )
 
 import enlighten
 
+from swap_validation_config import REPORTS_INFO, REQUIRED_COLUMNS, RUN_FOR
+
 
 log_setup()
 logger = logging.getLogger(__name__)
-
-
-REQUIRED_COLUMNS = ('Order_No', 'Order_Delivery_Status', 'Order_Cancellation_Status', 'Package_Type', 'Fulfillment_Mode')
-RUN_FOR = ('hotlink prepaid', 'hotlink postpaid', 'maxis postpaid', 'preorder postpaid instore')
-# RUN_FOR = ('preorder postpaid instore', )
-
-
-@dataclass
-class ReportInfo:
-    report_type: ReportType
-    filters: list[Filter]
-
-
-REPORTS_INFO = {
-    'hotlink prepaid': ReportInfo(**{
-        'report_type': ReportType('PREPAID'),
-        'filters': [],
-    }),
-    'hotlink postpaid': ReportInfo(**{
-        'report_type': ReportType('POSTPAID', 'hotlink postpaid'),
-        'filters': [
-            Filter('Fulfillment_Mode', 'exists', ('Standard Delivery', )),
-            Filter('Order_Delivery_Status', 'notExists', ('fulfilled', )),
-        ],
-    }),
-    'maxis postpaid': ReportInfo(**{
-        'report_type': ReportType('POSTPAID', 'maxis postpaid'),
-        'filters': [
-            Filter('Fulfillment_Mode', 'exists', ('Standard Delivery', )),
-            Filter('Order_Delivery_Status', 'notExists', ('fulfilled', )),
-        ],
-    }),
-    'preorder postpaid instore': ReportInfo(**{
-        'report_type': ReportType('POSTPAID', 'maxis postpaid'),
-        'filters': [
-            Filter('Fulfillment_Mode', 'exists', ('In-Store Pickup', )),
-            Filter('Package_Type', 'exists', ('Device + Plan', )),
-            Filter('Order_Type', 'exists', ('Pre Order', )),
-        ],
-    }),
-}
-
-cached_reports: list[Report] = []
-
-@dataclass
-class FilterDate(str):
-    date: str
-
-    def get_date_object(self):
-        try:
-            return datetime.strptime(self.date, '%d/%m/%Y %H:%M')
-        except ValueError:
-            raise SystemExit("Incorrect data format, should be DD/MM/YYYY HH:MM")
-
-    def __post_init__(self):
-        date_object = self.get_date_object()
-        if date_object > datetime.now():
-            raise SystemExit("Date cannot be in future")
-        return date_object
-
-
-@dataclass
-class FilterDates:
-    start: FilterDate
-    end: FilterDate
-
-    def __post_init__(self):
-        if self.start.get_date_object() > self.end.get_date_object():
-            raise SystemExit("End datetime cannot be before start datetime!")
 
 
 def extract_swap_eligible_orders(report: Report, filters: list[Filter]=[]) -> list[tuple[str, str]]:
@@ -114,7 +47,7 @@ def extract_swap_eligible_orders(report: Report, filters: list[Filter]=[]) -> li
     return swap_orders_ids
 
 
-def swap_filtering(responses: list[Response], orders_list: list[tuple[str, str]]) -> dict[str, list[tuple[str, str]]]:
+def orders_flow_filtering(responses: list[Response], orders_list: list[tuple[str, str]]) -> dict[str, list[tuple[str, str]]]:
     """
     Filters the orders in responses whether flown to swap or not.
     """
@@ -136,48 +69,7 @@ def swap_filtering(responses: list[Response], orders_list: list[tuple[str, str]]
     return responses_from_swap
 
 
-def save_data(data, report_name: str):
-    try:
-        dump_json_to_file(data, f'{report_name}_{datetime.now().strftime("%m_%d_%Y-%H_%M_%S")}.json')
-    except Exception as e:
-        logger.exception(e)
-        write_to_file(data, f'{report_name}_error')
-
-
-def get_default_filter_dates():
-    yesterday = datetime.now() - timedelta(days=1)
-    filter_start_date = FilterDate(yesterday.strftime('%d/%m/%Y 00:00'))
-    filter_end_date = FilterDate(datetime.now().strftime('%d/%m/%Y %H:%M'))
-    return FilterDates(filter_start_date, filter_end_date)
-
-
-def get_filter_dates_input():
-    """Prompts user to enter a filter date from and to"""
-    print("[!] Use 24 Hours format to give time.")
-    filter_dates = get_default_filter_dates()
-
-    filter_date_from = input(f"Enter starting datetime [DD/MM/YYYY HH:MM] (Default {filter_dates.start}): ")
-    if filter_date_from != "":
-        filter_dates.start = FilterDate(filter_date_from)
-
-    filter_date_to = input(f"Enter ending datetime [DD/MM/YYYY HH:MM] (Default {filter_dates.end}): ")
-    if filter_date_to != "":
-        filter_dates.end = FilterDate(filter_date_to)
-
-    return filter_dates
-
-
-def get_report(report_type: ReportType, filter_dates: FilterDates, save_to_disk: bool):
-    """Return report for a given report type and also cache for future use"""
-    for report in cached_reports:
-        if report.report_type == report_type:
-            logger.info('Report found in cache!')
-            return report
-    report = Report(report_type, filter_dates.start, filter_dates.end, save_to_disk)
-    cached_reports.append(report)
-    return report
-
-def swap_order_processing(filter_dates: FilterDates, save_fetched_report: bool):
+def swap_order_processing(filter_dates: FilterDates, save_fetched_reports: bool):
 
     orders_not_flown_to_swap: list[tuple[str, str]] = []
     dataframes: dict[str, pd.DataFrame] = {}
@@ -188,7 +80,7 @@ def swap_order_processing(filter_dates: FilterDates, save_fetched_report: bool):
         report_type = selected_report_info.report_type
         report_filters = selected_report_info.filters
 
-        report = get_report(report_type, filter_dates, save_fetched_report)
+        report = get_report(report_type, filter_dates, save_fetched_reports)
         orders_to_check = extract_swap_eligible_orders(report, report_filters)
 
         total_orders_count = len(orders_to_check)
@@ -206,7 +98,7 @@ def swap_order_processing(filter_dates: FilterDates, save_fetched_report: bool):
                 responses.append(response)
             pbar.update(force=True)
 
-        swap_flown_data = swap_filtering(responses, orders_to_check)
+        swap_flown_data = orders_flow_filtering(responses, orders_to_check)
 
         orders_not_found = swap_flown_data['not_found']
         if orders_not_found:
@@ -218,7 +110,7 @@ def swap_order_processing(filter_dates: FilterDates, save_fetched_report: bool):
                 dataframes[report.name] = pd.concat([df, filtered_dataframe])
             except KeyError:
                 dataframes[report.name] = filtered_dataframe
-        # save_data(swap_flown_data, report_name)
+        # save_json_data(swap_flown_data, report_name)
 
     if orders_not_flown_to_swap:
         logger.info(f"Orders not found in swap: {', '.join(map(lambda x: x[0], orders_not_flown_to_swap))}")
