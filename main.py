@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from swap_portal import SwapOrder
 from datetime import datetime, timedelta
 import pandas as pd
@@ -26,16 +27,31 @@ REQUIRED_COLUMNS = ('Order_No', 'Order_Delivery_Status', 'Order_Cancellation_Sta
 RUN_FOR = ('hotlink prepaid', 'hotlink postpaid', 'maxis postpaid', 'preorder postpaid instore')
 # RUN_FOR = ('preorder postpaid instore', )
 
+@dataclass
+class FilterDate(str):
+    date: str
 
-def validate_date(date_text):
-    try:
-        date_obj = datetime.strptime(date_text, '%d/%m/%Y %H:%M')
-    except ValueError:
-        raise SystemExit("Incorrect data format, should be DD/MM/YYYY HH:MM")
-    else:
-        if date_obj > datetime.now():
+    def get_date_object(self):
+        try:
+            return datetime.strptime(self.date, '%d/%m/%Y %H:%M')
+        except ValueError:
+            raise SystemExit("Incorrect data format, should be DD/MM/YYYY HH:MM")
+
+    def __post_init__(self):
+        date_object = self.get_date_object()
+        if date_object > datetime.now():
             raise SystemExit("Date cannot be in future")
-        return date_obj
+        return date_object
+
+
+@dataclass
+class FilterDates:
+    start: FilterDate
+    end: FilterDate
+
+    def __post_init__(self):
+        if self.start.get_date_object() > self.end.get_date_object():
+            raise SystemExit("End datetime cannot be before start datetime!")
 
 
 def extract_swap_eligible_orders(report: Report, filters: List[Filter]=[]) -> list[tuple[str, str]]:
@@ -85,6 +101,29 @@ def save_report(data, report_name):
     except Exception as e:
         logger.exception(e)
         write_to_file(data, f'{report_name}_error')
+
+
+def get_default_filter_dates():
+    yesterday = datetime.now() - timedelta(days=1)
+    filter_start_date = FilterDate(yesterday.strftime('%d/%m/%Y 00:00'))
+    filter_end_date = FilterDate(datetime.now().strftime('%d/%m/%Y %H:%M'))
+    return FilterDates(filter_start_date, filter_end_date)
+
+
+def get_filter_dates_input():
+    """Prompts user to enter a filter date from and to"""
+    print("[!] Use 24 Hours format to give time.")
+    filter_dates = get_default_filter_dates()
+
+    filter_date_from = input(f"Enter starting datetime [DD/MM/YYYY HH:MM] (Default {filter_dates.start}): ")
+    if filter_date_from != "":
+        filter_dates.start = FilterDate(filter_date_from)
+
+    filter_date_to = input(f"Enter ending datetime [DD/MM/YYYY HH:MM] (Default {filter_dates.end}): ")
+    if filter_date_to != "":
+        filter_dates.end = FilterDate(filter_date_to)
+
+    return filter_dates
 
 
 def main(reports_info:dict, downloader: ReportDownloader, swap_delivery: SwapOrder):
@@ -170,28 +209,10 @@ if __name__ == "__main__":
         },
     }
 
-    print("[!] Use 24 Hours format to give time.")
-    filter_date_from = input("Enter starting datetime [DD/MM/YYYY HH:MM] (Default Yesterday): ")
-    if filter_date_from == "":
-        filter_date_from = datetime.now() - timedelta(days=1)
-        filter_date_from = filter_date_from.strftime('%d/%m/%Y 00:00')
-        from_date_comp_obj = datetime.strptime(filter_date_from, '%d/%m/%Y %H:%M')
-    else:
-        from_date_comp_obj = validate_date(filter_date_from)
+    filter_dates = get_filter_dates_input()
+    logger.info(f"Range selected from: {filter_dates.start} - {filter_dates.end}")
 
-    filter_date_to = input("Enter ending datetime [DD/MM/YYYY HH:MM] (Default to now): ")
-    if filter_date_to == "":
-        filter_date_to = datetime.now().strftime('%d/%m/%Y %H:%M')
-        to_date_comp_obj = datetime.strptime(filter_date_to, '%d/%m/%Y %H:%M')
-    else:
-        to_date_comp_obj = validate_date(filter_date_to)
-    logger.info(f"Range selected from: {filter_date_from} - {filter_date_to}")
-
-
-    if from_date_comp_obj > to_date_comp_obj:
-        raise SystemExit("End datetime cannot be before start datetime!")
-
-    downloader = ReportDownloader(filter_date_from, filter_date_to, False)
+    downloader = ReportDownloader(filter_dates.start, filter_dates.end, False)
     swap_delivery = SwapOrder()
 
     main(reports_info, downloader, swap_delivery)
