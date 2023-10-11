@@ -22,6 +22,9 @@ class ReportType:
     planType: Literal['PREPAID', 'POSTPAID']
     ratePlan: Optional[Literal['hotlink postpaid', 'maxis postpaid']] = ''
 
+    def __eq__(self, other):
+        return self.planType + self.ratePlan == other.planType + other.ratePlan
+
 
 @dataclass
 class Filter:
@@ -40,7 +43,7 @@ def excel_buffer_to_dataframe(buffer) -> pd.DataFrame:
 class ReportDownloader:
     """Helps to download the report from cms."""
 
-    def __init__(self, filter_date_from: str, filter_date_to: str, save_to_disk=False):
+    def __init__(self, filter_date_from: str, filter_date_to: str):
         self.url = 'https://api-digital2.isddc.men.maxis.com.my/ecommerce/api/v4.0/cms/order/masterreport'
         self.headers = {
             'authority': 'api-digital2.isddc.men.maxis.com.my',
@@ -62,7 +65,6 @@ class ReportDownloader:
             'filterdatefrom': filter_date_from,
             'filterdateto': filter_date_to
         })
-        self.save_to_disk = save_to_disk
         self.created_date = datetime.now().strftime("%m_%d_%Y-%H_%M_%S")
 
     def set_headers_filters(self, filterplantype, filterrateplan):
@@ -72,53 +74,24 @@ class ReportDownloader:
             'filterrateplan': filterrateplan,
         })
 
-    def get_file_name(self, report_type: ReportType):
-        """Returns a file name for the report."""
-        if report_type.planType == 'PREPAID':
-            return f'prepaid_report{self.created_date}.xlsx'
-        elif report_type.planType == 'POSTPAID':
-            if report_type.ratePlan == 'hotlink postpaid':
-                return f'hotlink_postpaid_report{self.created_date}.xlsx'
-            elif report_type.ratePlan == 'maxis postpaid':
-                return f'maxis_postpaid_report{self.created_date}.xlsx'
-        return f'{report_type.planType}-{report_type.ratePlan}{self.created_date}.xlsx'
 
-    def get_report(self, report_type: ReportType):
-        """Pulls the report from cms and returns in bytes."""
-
-        plantype = report_type.planType
-        rateplan = report_type.ratePlan
-        self.set_headers_filters(plantype, rateplan)
-        report_name = rateplan if rateplan else plantype
-        logger.info(f"[+] Fetching {report_name} report...")
-        try:
-            response = requests.get(
-                    url=self.url,
-                    headers=self.headers,
-            )
-            logger.info(f"{response.request.method} {response.url} [status:{response.status_code} request:{response.elapsed.total_seconds():.3f}s]")
-            response.raise_for_status()
-        except HTTPError as error:
-            raise SystemExit(error.args[0])
-        except ConnectionError as connection_error:
-            raise SystemExit(connection_error.args)
-        if self.save_to_disk:
-            filename = self.get_file_name(report_type=report_type)
-            write_bytes_to_file(response.content, filename)
-        return response.content
-
-
-class Report:
-    def __init__(self, content: bytes, report_type: ReportType) -> None:
-        self.content = content
-        self.dataframe = excel_buffer_to_dataframe(self.content)
+class Report(ReportDownloader):
+    def __init__(self, report_type: ReportType, filter_date_from, filter_date_to, save_to_disk: bool) -> None:
+        super().__init__(
+            filter_date_from=filter_date_from,
+            filter_date_to=filter_date_to,
+        )
         self.report_type = report_type
-        self.name = self.generate_name()
+        self.save_to_disk = save_to_disk
+        self.name = self.generate_report_title()
+        self.content = self.download_report()
+        self.dataframe = excel_buffer_to_dataframe(self.content)
+
 
     def __enter__(self):
         return self
 
-    def generate_name(self):
+    def generate_report_title(self):
         if self.report_type.planType == 'PREPAID':
             return 'Hotlink Prepaid Report'
         if self.report_type.planType == 'POSTPAID':
@@ -131,6 +104,16 @@ class Report:
         else:
             raise SystemExit(f"Unknown plan type {self.report_type.planType}")
 
+    def get_file_name(self):
+        """Returns a file name for the report."""
+        if self.report_type.planType == 'PREPAID':
+            return f'prepaid_report{self.created_date}.xlsx'
+        elif self.report_type.planType == 'POSTPAID':
+            if self.report_type.ratePlan == 'hotlink postpaid':
+                return f'hotlink_postpaid_report{self.created_date}.xlsx'
+            elif self.report_type.ratePlan == 'maxis postpaid':
+                return f'maxis_postpaid_report{self.created_date}.xlsx'
+        return f'{self.report_type.planType}-{self.report_type.ratePlan}{self.created_date}.xlsx'
 
     def filter(self, filter: Filter):
         """
@@ -151,3 +134,27 @@ class Report:
 
     def get_filtered_dataframe_by_orderNos(self, orders: Iterable[str]) -> pd.DataFrame:
         return self.dataframe.loc[self.dataframe['Order_No'].isin(orders)]
+
+    def download_report(self):
+        """Pulls the report from cms and returns in bytes."""
+
+        plantype = self.report_type.planType
+        rateplan = self.report_type.ratePlan
+        self.set_headers_filters(plantype, rateplan)
+        report_name = self.name
+        logger.info(f"[+] Fetching {report_name} ...")
+        try:
+            response = requests.get(
+                    url=self.url,
+                    headers=self.headers,
+            )
+            logger.info(f"{response.request.method} {response.url} [status:{response.status_code} request:{response.elapsed.total_seconds():.3f}s]")
+            response.raise_for_status()
+        except HTTPError as error:
+            raise SystemExit(error.args[0])
+        except ConnectionError as connection_error:
+            raise SystemExit(connection_error.args)
+        if self.save_to_disk:
+            filename = self.get_file_name()
+            write_bytes_to_file(response.content, filename)
+        return response.content

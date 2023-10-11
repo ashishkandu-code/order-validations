@@ -1,9 +1,8 @@
 from dataclasses import dataclass
-from swap_portal import SwapOrder
+from swap_portal import SwapDeliveryAuthenticatedPage
 from datetime import datetime, timedelta
 import pandas as pd
 
-from typing import List
 from requests import Response
 
 import logging
@@ -11,7 +10,6 @@ from helper import dump_json_to_file, write_to_file, generate_xlsx_report
 from my_logging import log_setup
 from reports import (
     Report,
-    ReportDownloader,
     ReportType,
     Filter,
 )
@@ -26,6 +24,44 @@ logger = logging.getLogger(__name__)
 REQUIRED_COLUMNS = ('Order_No', 'Order_Delivery_Status', 'Order_Cancellation_Status', 'Package_Type', 'Fulfillment_Mode')
 RUN_FOR = ('hotlink prepaid', 'hotlink postpaid', 'maxis postpaid', 'preorder postpaid instore')
 # RUN_FOR = ('preorder postpaid instore', )
+
+
+@dataclass
+class ReportInfo:
+    report_type: ReportType
+    filters: list[Filter]
+
+
+REPORTS_INFO = {
+    'hotlink prepaid': ReportInfo(**{
+        'report_type': ReportType('PREPAID'),
+        'filters': [],
+    }),
+    'hotlink postpaid': ReportInfo(**{
+        'report_type': ReportType('POSTPAID', 'hotlink postpaid'),
+        'filters': [
+            Filter('Fulfillment_Mode', 'exists', ('Standard Delivery', )),
+            Filter('Order_Delivery_Status', 'notExists', ('fulfilled', )),
+        ],
+    }),
+    'maxis postpaid': ReportInfo(**{
+        'report_type': ReportType('POSTPAID', 'maxis postpaid'),
+        'filters': [
+            Filter('Fulfillment_Mode', 'exists', ('Standard Delivery', )),
+            Filter('Order_Delivery_Status', 'notExists', ('fulfilled', )),
+        ],
+    }),
+    'preorder postpaid instore': ReportInfo(**{
+        'report_type': ReportType('POSTPAID', 'maxis postpaid'),
+        'filters': [
+            Filter('Fulfillment_Mode', 'exists', ('In-Store Pickup', )),
+            Filter('Package_Type', 'exists', ('Device + Plan', )),
+            Filter('Order_Type', 'exists', ('Pre Order', )),
+        ],
+    }),
+}
+
+cached_reports: list[Report] = []
 
 @dataclass
 class FilterDate(str):
@@ -54,7 +90,7 @@ class FilterDates:
             raise SystemExit("End datetime cannot be before start datetime!")
 
 
-def extract_swap_eligible_orders(report: Report, filters: List[Filter]=[]) -> list[tuple[str, str]]:
+def extract_swap_eligible_orders(report: Report, filters: list[Filter]=[]) -> list[tuple[str, str]]:
     """
     It displays current report selected columns dataframe and filters order IDs.
     Also renames order IDs starting from either 'HOS' or 'MOS' based on report type.
@@ -73,7 +109,7 @@ def extract_swap_eligible_orders(report: Report, filters: List[Filter]=[]) -> li
     return swap_orders_ids
 
 
-def swap_filtering(responses: List[Response], orders_list: list[tuple[str, str]]) -> dict[str, List[tuple[str, str]]]:
+def swap_filtering(responses: list[Response], orders_list: list[tuple[str, str]]) -> dict[str, list[tuple[str, str]]]:
     """
     Filters the orders in responses whether flown to swap or not.
     """
@@ -126,18 +162,28 @@ def get_filter_dates_input():
     return filter_dates
 
 
-def main(reports_info:dict, downloader: ReportDownloader, swap_delivery: SwapOrder):
+def get_report(report_type: ReportType, filter_dates: FilterDates, save_to_disk: bool):
+    for report in cached_reports:
+        if report.report_type == report_type:
+            logger.info('Report found in cache!')
+            return report
+    report = Report(report_type, filter_dates.start, filter_dates.end, save_to_disk)
+    cached_reports.append(report)
+    return report
+
+def main(filter_dates: FilterDates, save_to_disk: bool):
 
     orders_not_flown_to_swap: list[tuple[str, str]] = []
     dataframes = dict()
-    for report_name in RUN_FOR:
-        selected_report: dict = reports_info[report_name]
-        report_type = selected_report.get('report_type')
-        report_filter = selected_report.get('filters')
+    swap_delivery_page = SwapDeliveryAuthenticatedPage()
 
-        raw_content = downloader.get_report(report_type)
-        report = Report(raw_content, report_type)
-        orders_to_check = extract_swap_eligible_orders(report, report_filter)
+    for report_name in RUN_FOR:
+        selected_report_info = REPORTS_INFO[report_name]
+        report_type = selected_report_info.report_type
+        report_filters = selected_report_info.filters
+
+        report = get_report(report_type, filter_dates, save_to_disk)
+        orders_to_check = extract_swap_eligible_orders(report, report_filters)
 
         total_orders_count = len(orders_to_check)
         if total_orders_count == 0:
@@ -147,7 +193,7 @@ def main(reports_info:dict, downloader: ReportDownloader, swap_delivery: SwapOrd
 
         responses = []
         for swap_order_id, _ in orders_to_check:
-            response = swap_delivery.get_order(swap_order_id)
+            response = swap_delivery_page.get_order(swap_order_id)
             if not response:
                 responses.append({'iTotalDisplayRecords': -1})
             else:
@@ -180,39 +226,7 @@ def main(reports_info:dict, downloader: ReportDownloader, swap_delivery: SwapOrd
 
 if __name__ == "__main__":
 
-    reports_info = {
-        'hotlink prepaid': {
-            'report_type': ReportType('PREPAID'),
-            'filters': [],
-        },
-        'hotlink postpaid': {
-            'report_type': ReportType('POSTPAID', 'hotlink postpaid'),
-            'filters': [
-                Filter('Fulfillment_Mode', 'exists', ('Standard Delivery', )),
-                Filter('Order_Delivery_Status', 'notExists', ('fulfilled', )),
-            ],
-        },
-        'maxis postpaid': {
-            'report_type': ReportType('POSTPAID', 'maxis postpaid'),
-            'filters': [
-                Filter('Fulfillment_Mode', 'exists', ('Standard Delivery', )),
-                Filter('Order_Delivery_Status', 'notExists', ('fulfilled', )),
-            ],
-        },
-        'preorder postpaid instore': {
-            'report_type': ReportType('POSTPAID', 'maxis postpaid'),
-            'filters': [
-                Filter('Fulfillment_Mode', 'exists', ('In-Store Pickup', )),
-                Filter('Package_Type', 'exists', ('Device + Plan', )),
-                Filter('Order_Type', 'exists', ('Pre Order', )),
-            ],
-        },
-    }
-
     filter_dates = get_filter_dates_input()
     logger.info(f"Range selected from: {filter_dates.start} - {filter_dates.end}")
 
-    downloader = ReportDownloader(filter_dates.start, filter_dates.end, False)
-    swap_delivery = SwapOrder()
-
-    main(reports_info, downloader, swap_delivery)
+    main(filter_dates, save_to_disk=False)
