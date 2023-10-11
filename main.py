@@ -163,6 +163,7 @@ def get_filter_dates_input():
 
 
 def get_report(report_type: ReportType, filter_dates: FilterDates, save_to_disk: bool):
+    """Return report for a given report type and also cache for future use"""
     for report in cached_reports:
         if report.report_type == report_type:
             logger.info('Report found in cache!')
