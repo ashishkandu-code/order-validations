@@ -1,3 +1,4 @@
+from copy import copy
 import requests
 from requests.exceptions import HTTPError, ConnectionError
 from dataclasses import dataclass
@@ -169,5 +170,5 @@ def get_report(report_type: ReportType, filter_dates: FilterDates, save_to_disk:
             logger.info('Report found in cache!')
             return report
     report = Report(report_type, filter_dates, save_to_disk)
-    cached_reports.append(report)
+    cached_reports.append(copy(report))
     return report
