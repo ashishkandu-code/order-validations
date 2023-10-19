@@ -2,25 +2,23 @@ from filter_dates import FilterDates
 from swap_portal import SwapDeliveryAuthenticatedPage
 from datetime import datetime
 import pandas as pd
-
 from requests import Response
 
-import logging
 from helper import generate_xlsx_report
-from my_logging import log_setup
 from reports import (
     Report,
     Filter,
     get_report,
 )
+from loggerfactory import LoggerFactory
 
 import enlighten
 
-from swap_validation_config import REPORTS_INFO, REQUIRED_COLUMNS, RUN_FOR
+from order_validation_config import REPORTS_INFO, REQUIRED_COLUMNS, RUN_FOR
+from wm_portal import WM
 
 
-log_setup()
-logger = logging.getLogger(__name__)
+logger = LoggerFactory.getLogger(__name__)
 
 
 def extract_swap_eligible_orders(report: Report, filters: list[Filter]=[]) -> list[tuple[str, str]]:
@@ -47,7 +45,7 @@ def extract_swap_eligible_orders(report: Report, filters: list[Filter]=[]) -> li
     return swap_orders_ids
 
 
-def orders_flow_filtering(responses: list[Response], orders_list: list[tuple[str, str]]) -> dict[str, list[tuple[str, str]]]:
+def swap_orders_flow_filtering(responses: list[Response], orders_list: list[tuple[str, str]]) -> dict[str, list[tuple[str, str]]]:
     """
     Filters the orders in responses whether flown to swap or not.
     """
@@ -69,11 +67,12 @@ def orders_flow_filtering(responses: list[Response], orders_list: list[tuple[str
     return responses_from_swap
 
 
-def swap_order_processing(filter_dates: FilterDates, save_fetched_reports: bool):
+def order_processing(filter_dates: FilterDates, save_fetched_reports: bool):
 
     orders_not_flown_to_swap: list[tuple[str, str]] = []
     dataframes: dict[str, pd.DataFrame] = {}
     swap_delivery_page = SwapDeliveryAuthenticatedPage()
+    wm_failed_orders = []
 
     for report_name in RUN_FOR:
         selected_report_info = REPORTS_INFO[report_name]
@@ -81,12 +80,33 @@ def swap_order_processing(filter_dates: FilterDates, save_fetched_reports: bool)
         report_filters = selected_report_info.filters
 
         report = get_report(report_type, filter_dates, save_fetched_reports)
+        manager = enlighten.get_manager()
+
+        # WM order processing and validation
+        if report_name == 'wm prepaid':
+            for filter in report_filters:
+                report.filter(filter)
+            order_ids = report.dataframe['Order_No'].values
+            total_orders_count = len(order_ids)
+            if total_orders_count == 0:
+                continue
+            pbar = manager.counter(total=total_orders_count, desc=report_name)
+            wm = WM()
+            for order_id in order_ids:
+                order = wm.fetch(order_id)
+                if order.interface_log_ID == 'PENDING':
+                    wm_failed_orders.append(order)
+                pbar.update(force=True)
+            df = pd.DataFrame([x.__dict__ for x in wm_failed_orders])
+            dataframes[report_name] = df
+            continue
+
+        # Swap order processing
         orders_to_check = extract_swap_eligible_orders(report, report_filters)
 
         total_orders_count = len(orders_to_check)
         if total_orders_count == 0:
             continue
-        manager = enlighten.get_manager()
         pbar = manager.counter(total=total_orders_count, desc=report_name)
 
         responses = []
@@ -98,7 +118,7 @@ def swap_order_processing(filter_dates: FilterDates, save_fetched_reports: bool)
                 responses.append(response)
             pbar.update(force=True)
 
-        swap_flown_data = orders_flow_filtering(responses, orders_to_check)
+        swap_flown_data = swap_orders_flow_filtering(responses, orders_to_check)
 
         orders_not_found = swap_flown_data['not_found']
         if orders_not_found:
@@ -114,9 +134,16 @@ def swap_order_processing(filter_dates: FilterDates, save_fetched_reports: bool)
 
     if orders_not_flown_to_swap:
         logger.info(f"Orders not found in swap: {', '.join(map(lambda x: x[0], orders_not_flown_to_swap))}")
+    else:
+        logger.info("All orders flown to swap successfully!")
+
+    if wm_failed_orders:
+        logger.info("Some orders fail at WM")
+    else:
+        logger.info("No orders fail at WM")
+
+    if orders_not_flown_to_swap or wm_failed_orders:
         report_name_w_ext = f'Report_{datetime.now().strftime("%m_%d_%Y-%H_%M_%S")}.xlsx'
         report_path = generate_xlsx_report(dataframes, report_name_w_ext)
         if report_path.exists():
             logger.info(f"Report generated successfully! {report_path}")
-    else:
-        logger.info("All orders flown to swap successfully!")

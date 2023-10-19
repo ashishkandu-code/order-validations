@@ -1,12 +1,10 @@
-import logging
 import argparse
 from filter_dates import get_default_filter_dates, get_filter_dates_input
 
-from swap_order_validation import swap_order_processing
-from my_logging import log_setup
+from order_validation import order_processing
+from loggerfactory import LoggerFactory
 
-log_setup()
-logger = logging.getLogger(__name__)
+logger = LoggerFactory.get_logger(__name__)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -27,4 +25,5 @@ if __name__ == '__main__':
     filter_dates = check_args()
 
     logger.info(f"Range selected from: {filter_dates.start} - {filter_dates.end}")
-    swap_order_processing(filter_dates=filter_dates, save_fetched_reports=False)
+    order_processing(filter_dates=filter_dates, save_fetched_reports=False)
+    # print(check_orders(filter_dates=filter_dates))

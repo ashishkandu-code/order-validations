@@ -4,11 +4,10 @@ import pandas as pd
 import json
 import time
 
-from my_logging import log_setup
-import logging
+from loggerfactory import LoggerFactory
 
-log_setup()
-logger = logging.getLogger(__name__)
+
+logger = LoggerFactory.get_logger(__name__)
 
 reports_dir = Path('reports')
 reports_dir.mkdir(parents=True, exist_ok=True)

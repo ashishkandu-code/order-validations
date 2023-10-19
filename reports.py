@@ -10,13 +10,11 @@ import io
 from datetime import datetime
 from filter_dates import FilterDates
 
-from my_logging import log_setup
-import logging
-
+from loggerfactory import LoggerFactory
 from helper import write_bytes_to_file
 
-log_setup()
-logger = logging.getLogger(__name__)
+
+logger = LoggerFactory.get_logger(__name__)
 
 
 @dataclass

@@ -7,7 +7,7 @@ from reports import (
 
 
 REQUIRED_COLUMNS = ('Order_No', 'Order_Delivery_Status', 'Order_Cancellation_Status', 'Package_Type', 'Fulfillment_Mode')
-RUN_FOR = ('hotlink prepaid', 'hotlink postpaid', 'maxis postpaid', 'preorder postpaid instore')
+RUN_FOR = ('hotlink prepaid', 'hotlink postpaid', 'maxis postpaid', 'preorder postpaid instore', 'wm prepaid')
 # RUN_FOR = ('preorder postpaid instore', )
 
 
@@ -43,5 +43,9 @@ REPORTS_INFO = {
             Filter('Package_Type', 'exists', ('Device + Plan', )),
             Filter('Order_Type', 'exists', ('Pre Order', )),
         ],
+    }),
+    'wm prepaid': ReportInfo(**{
+        'report_type': ReportType('PREPAID'),
+        'filters': [Filter('Order_No', 'contains', ('MOS', ))],
     }),
 }

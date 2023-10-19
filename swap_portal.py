@@ -2,19 +2,16 @@ from requests import Session
 from requests.exceptions import HTTPError, ConnectionError, ReadTimeout, SSLError
 from urllib3.util import Retry
 from requests.adapters import HTTPAdapter
-from my_logging import log_setup
-import logging
-import time
+from loggerfactory import LoggerFactory
 
 from dotenv import load_dotenv
 from os import getenv
 
 from helper import write_to_file, current_milli_time
 
-log_setup()
 load_dotenv()
 
-logger = logging.getLogger(__name__)
+logger = LoggerFactory.get_logger(__name__)
 
 retry_strategy = Retry(
     total=4,
