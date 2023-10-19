@@ -6,6 +6,8 @@ from pathlib import Path
 
 package_dir = Path(__file__).parent.absolute()
 DEFAULT_LOG_PATH = package_dir.joinpath('logger_config.yml')
+DEFAULT_LOG_LEVEL = logging.INFO
+
 
 class LoggerFactory(object):
     """
@@ -15,7 +17,7 @@ class LoggerFactory(object):
     _LOG = None
 
     @staticmethod
-    def __create_logger(name: str, cfg_path: Path, log_level: str):
+    def __create_logger(name: str, cfg_path: Path):
         """
         A private method that interacts with the python logging module.
         """
@@ -25,17 +27,10 @@ class LoggerFactory(object):
                     config = yaml.safe_load(cfg_file.read())
                     logging.config.dictConfig(config)
                 except yaml.YAMLError as exc:
-                    logging.basicConfig(level=logging.INFO)
+                    logging.basicConfig(level=DEFAULT_LOG_LEVEL)
                     logging.warning("YAMLError happened: %s", exc)
 
         LoggerFactory._LOG = logging.getLogger(name)
-
-        if log_level == "INFO":
-            LoggerFactory._LOG.setLevel(logging.INFO)
-        elif log_level == "ERROR":
-            LoggerFactory._LOG.setLevel(logging.ERROR)
-        elif log_level == "DEBUG":
-            LoggerFactory._LOG.setLevel(logging.DEBUG)
 
         return LoggerFactory._LOG
 
@@ -43,7 +38,6 @@ class LoggerFactory(object):
     def get_logger(
             name: str,
             cfg_path=DEFAULT_LOG_PATH,
-            log_level: str=logging.INFO
     ):
         """
         A static method called by other modules to
@@ -53,10 +47,8 @@ class LoggerFactory(object):
             name (str): Name of the logger.
             cfg_path (Path, Optional): :obj:`Path` of the yaml
             config file for logging
-            log_level (Literal['INFO', 'ERROR', 'DEBUG'], Optional):
-            Log level to override
         """
-        logger = LoggerFactory.__create_logger(name, cfg_path, log_level)
+        logger = LoggerFactory.__create_logger(name, cfg_path)
 
         # return the logger object
         return logger
