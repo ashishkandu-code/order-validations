@@ -160,6 +160,7 @@ class WM(Session):
             data=self.data,
             params=self.params,
         )
+        logger.info(f"{response.request.method} /{id} [status:{response.status_code} request:{response.elapsed.total_seconds():.3f}s]")
         soup = BeautifulSoup(response.text, 'lxml')
         tbody = soup.find('tbody')
         last_row = tbody.find_all('tr')[-1]

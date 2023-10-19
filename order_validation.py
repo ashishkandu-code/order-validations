@@ -18,7 +18,7 @@ from order_validation_config import REPORTS_INFO, REQUIRED_COLUMNS, RUN_FOR
 from wm_portal import WM
 
 
-logger = LoggerFactory.getLogger(__name__)
+logger = LoggerFactory.get_logger(__name__)
 
 
 def extract_swap_eligible_orders(report: Report, filters: list[Filter]=[]) -> list[tuple[str, str]]:
@@ -77,7 +77,11 @@ def order_processing(filter_dates: FilterDates, save_fetched_reports: bool):
     wm_failed_orders = []
 
     for report_name in RUN_FOR:
-        selected_report_info = REPORTS_INFO[report_name]
+        try:
+            selected_report_info = REPORTS_INFO[report_name]
+        except KeyError as keyerror:
+            logger.error(f"Report {keyerror.args[0]} not found. Make sure RUN_FOR is a tuple!")
+            raise SystemExit
         report_type = selected_report_info.report_type
         report_filters = selected_report_info.filters
 
@@ -96,7 +100,7 @@ def order_processing(filter_dates: FilterDates, save_fetched_reports: bool):
             wm = WM()
             for order_id in order_ids:
                 order = wm.fetch(order_id)
-                if order.interface_log_ID == 'PENDING':
+                if order.interface_log_ID == 'FAIL':
                     wm_failed_orders.append(order)
                 pbar.update(force=True)
             df = pd.DataFrame([x.__dict__ for x in wm_failed_orders])
