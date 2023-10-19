@@ -68,7 +68,9 @@ def swap_orders_flow_filtering(responses: list[Response], orders_list: list[tupl
 
 
 def order_processing(filter_dates: FilterDates, save_fetched_reports: bool):
-
+    """The main logic for order processing and validation.
+    Checks for both swap order flow and wm order status.
+    """
     orders_not_flown_to_swap: list[tuple[str, str]] = []
     dataframes: dict[str, pd.DataFrame] = {}
     swap_delivery_page = SwapDeliveryAuthenticatedPage()

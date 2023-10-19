@@ -26,4 +26,3 @@ if __name__ == '__main__':
 
     logger.info(f"Range selected from: {filter_dates.start} - {filter_dates.end}")
     order_processing(filter_dates=filter_dates, save_fetched_reports=False)
-    # print(check_orders(filter_dates=filter_dates))

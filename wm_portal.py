@@ -18,7 +18,7 @@ logger = LoggerFactory.get_logger(__name__)
 BASE_URL = 'http://10.200.50.152:8989'
 LOGIN_ENDPOINT = '/user.current.start.page'
 INITIALIZATION_ENDPOINT = '/opf.orderdetails'
-ORDER_DETAILS = '/meta/default/maxis_opf_support___opfdetails/0000007517'
+ORDER_DETAILS_ENDPOINT = '/meta/default/maxis_opf_support___opfdetails/0000007517'
 
 
 @dataclass
@@ -121,7 +121,7 @@ class WM(Session):
             '__fc': 'jsfwmp7517:defaultForm:button',
             '__vf': 'jsfwmp7517:defaultForm',
             'wms.layout': 'tabulaRasa',
-            'wms.portlet': '/meta/default/maxis_opf_support___opfdetails/0000007517',
+            'wms.portlet': ORDER_DETAILS_ENDPOINT,
             'wms.hiddenRequest': 'true',
             'wms.shell': 'shell.blank',
             'wms.replaceForNextUrl': 'hiddenRequest=&shell=&layout=&portlet='
@@ -156,7 +156,7 @@ class WM(Session):
         """Fetches order details for a order by its ID."""
         self.data.update({'jsfwmp7517:defaultForm:htmlInputText': id})
         response = self.post(
-            ORDER_DETAILS,
+            ORDER_DETAILS_ENDPOINT,
             data=self.data,
             params=self.params,
         )
