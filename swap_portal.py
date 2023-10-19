@@ -1,5 +1,7 @@
 from requests import Session
 from requests.exceptions import HTTPError, ConnectionError, ReadTimeout, SSLError
+from urllib3.util import Retry
+from requests.adapters import HTTPAdapter
 from my_logging import log_setup
 import logging
 import time
@@ -14,14 +16,23 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+retry_strategy = Retry(
+    total=4,
+    backoff_factor=2,
+    status_forcelist=[429, 500, 502, 503, 504],
+)
+
+adapter = HTTPAdapter(max_retries=retry_strategy)
+
 wait = 30 # seconds
 timeout_seconds = 120
 
 class Swap(Session):
     """Returns a swap authenticated session."""
-    def __init__(self):
-        super().__init__()
-        self.retries = 3
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.mount('http://', adapter)
+        self.mount('https://', adapter)
         self.headers ={
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
             'Accept-Language': 'en-US,en;q=0.9',
@@ -60,17 +71,13 @@ class Swap(Session):
             res.raise_for_status()
             if 'Login' in res.url:
                 logger.error('Could not authenticate!')
-                raise SystemExit()
-        except (SSLError, HTTPError, ConnectionError) as ssl_error:
-            if self.retries > 0:
-                self.retries -= 1
-                logger.warning(ssl_error.args[0])
-                logger.info(f"Retrying in {wait} seconds")
-                time.sleep(wait)
-                self.login()
-            else:
-                logger.error(ssl_error.args)
-                raise SystemExit('Could not login.')
+                raise SystemExit('Login failed')
+        except HTTPError as http_error:
+            logger.error(http_error.args[0])
+        except ConnectionError as conn_error:
+            logger.error(conn_error.args[0])
+        except Exception as e:
+            logger.exception(e)
         else:
             if not res.ok:
                 write_to_file(res.text, 'login_error.html')
@@ -78,7 +85,6 @@ class Swap(Session):
                 raise SystemExit('Could not login.')
             else:
                 logger.info('Login success')
-                self.retries = 3
 
     def initialize(self):
         headers = {'Accept': '*/*',
@@ -105,6 +111,10 @@ class Swap(Session):
             response.raise_for_status()
         except HTTPError as http_error:
             logger.error(http_error.args[0])
+        except ConnectionError as conn_error:
+            logger.error(conn_error.args[0])
+        except ReadTimeout as e:
+            logger.exception(e)
         else:
             logger.info('Initialization is success!')
 
@@ -230,7 +240,6 @@ class SwapDeliveryAuthenticatedPage:
         }
 
         self.swap_session = Swap()
-        self.retries = 3
 
         # Set necessary cookies and headers for fetching
         self.swap_session.load_or_update_headers(self.headers)
@@ -239,6 +248,7 @@ class SwapDeliveryAuthenticatedPage:
     def get_order(self, order_id: str):
         """Returns the order response from swap portal."""
         self.params.update({'sSearch': order_id})
+        error_msg = f'Could not get details for {order_id}'
         try:
             response = self.swap_session.get(
                 'https://delivery-maxis.swap-asia.com/Delivery/AjaxHandler',
@@ -247,27 +257,14 @@ class SwapDeliveryAuthenticatedPage:
             )
             logger.info(f"{response.request.method} /{order_id} [status:{response.status_code} request:{response.elapsed.total_seconds():.3f}s]")
             response.raise_for_status()
-        except (HTTPError, ReadTimeout) as req_error:
-            logger.warning(req_error.args[0])
-            if self.retries > 0:
-                self.retries -= 1
-                logger.info(f"Waiting for {wait} seconds and retry = {self.retries}...")
-                time.sleep(wait)
-                self.swap_session = Swap()
-                return self.get_order(order_id)
-            else:
-                self.retries = 3
-                logger.error(f'Could not get details for {order_id} retry left = {self.retries}')
-                return
-        except ConnectionError as connection_error:
-            logger.warning(connection_error.args[0])
-            if self.retries > 0:
-                self.retries -= 1
-                self.swap_session = Swap()
-                return self.get_order(order_id)
-            else:
-                self.retries = 3
-                logger.error(f'Could not get details for {order_id} retry left = {self.retries}')
-                return
-        self.retries = 3
-        return response
+            return response
+        # REMOVE: for debug catching all exceptions
+        except Exception as e:
+            logger.exception(e)
+        except HTTPError:
+            logger.error(error_msg)
+        except ConnectionError:
+            logger.error(error_msg)
+        except ReadTimeout:
+            logger.error(error_msg)
+        return None
