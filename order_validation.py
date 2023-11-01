@@ -103,8 +103,9 @@ def order_processing(filter_dates: FilterDates, save_fetched_reports: bool):
                 if order.interface_log_ID == 'FAIL':
                     wm_failed_orders.append(order)
                 pbar.update(force=True)
-            df = pd.DataFrame([x.__dict__ for x in wm_failed_orders])
-            dataframes[report_name] = df
+            if wm_failed_orders:
+                df = pd.DataFrame([x.__dict__ for x in wm_failed_orders])
+                dataframes[report_name] = df
             continue
 
         # Swap order processing
