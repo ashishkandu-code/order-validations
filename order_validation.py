@@ -60,7 +60,7 @@ def swap_orders_flow_filtering(responses: list[Response], orders_list: list[tupl
         except AttributeError as e:
             logger.error(e)
             data = response
-        if data['iTotalDisplayRecords'] == 1:
+        if data['iTotalDisplayRecords'] > 0:
             responses_from_swap["found"].append(order_records)
         else:
             responses_from_swap["not_found"].append(order_records)
