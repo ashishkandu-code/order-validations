@@ -33,7 +33,7 @@ class FilterDates:
 def get_default_filter_dates():
     yesterday = datetime.now() - timedelta(days=1)
     filter_start_date = FilterDate(yesterday.strftime('%d/%m/%Y 00:00'))
-    filter_end_date = FilterDate(datetime.now().strftime('%d/%m/%Y %H:%M'))
+    filter_end_date = FilterDate(datetime.now().strftime('%d/%m/%Y 00:00'))
     return FilterDates(filter_start_date, filter_end_date)
 
 
