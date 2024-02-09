@@ -116,13 +116,13 @@ def get_filter_dates_input():
     print("[!] Use 24 Hours format to give time.")
     filter_dates = get_default_filter_dates()
 
-    filter_date_from = input(f"Enter starting datetime [DD/MM/YYYY HH:MM] (Default {filter_dates.start.date}): ")
-    if filter_date_from != "":
-        filter_dates.start = FilterDate(filter_date_from)
+    start_date_input = input(f"Enter starting datetime [DD/MM/YYYY HH:MM] (Default {filter_dates.start.date}): ")
+    if start_date_input != "":
+        filter_dates.start = FilterDate(start_date_input)
 
-    filter_date_to = input(f"Enter ending datetime [DD/MM/YYYY HH:MM] (Default {filter_dates.end.date}): ")
-    if filter_date_to != "":
-        filter_dates.end = FilterDate(filter_date_to)
+    end_date_input = input(f"Enter ending datetime [DD/MM/YYYY HH:MM] (Default {filter_dates.end.date}): ")
+    if end_date_input != "":
+        filter_dates.end = FilterDate(end_date_input)
 
     return filter_dates
 
