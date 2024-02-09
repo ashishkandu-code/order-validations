@@ -1,6 +1,8 @@
+from unittest.mock import patch
 import pytest
 from datetime import datetime, timedelta
 from filter_dates import FilterDate, FilterDates, get_default_filter_dates, get_filter_dates_input
+
 
 def test_get_date_object_success():
     """Test that a FilterDate object returns the correct datetime object."""
@@ -12,6 +14,7 @@ def test_get_date_object_success():
     # Then the resulting datetime object should match the expected value
     assert filter_date.get_date_object() == expected_date
 
+
 def test_get_date_object_fail():
     """Test that an invalid date string raises a SystemExit exception."""
     # Given an invalid date string
@@ -20,6 +23,7 @@ def test_get_date_object_fail():
     with pytest.raises(SystemExit) as e:
         FilterDate('32/04/2023 12:00').get_date_object()
     assert str(e.value) == "Incorrect data format, should be DD/MM/YYYY HH:MM"
+
 
 def test_post_init_not_future():
     """Test that a FilterDate object is not initialized with a future date."""
@@ -30,16 +34,19 @@ def test_post_init_not_future():
     # Then the returned datetime object should not be in the future
     assert filter_date.__post_init__() <= datetime.now()
 
+
 def test_post_init_future_date():
     """Test that initializing a FilterDate object with a future date raises SystemExit."""
     # Given a date string that is in the future
-    future_date = (datetime.now() + timedelta(days=1)).strftime('%d/%m/%Y %H:%M')
+    future_date = (datetime.now() + timedelta(days=1)
+                   ).strftime('%d/%m/%Y %H:%M')
 
     # When calling __post_init__
     # Then a SystemExit exception should be raised with the correct error message
     with pytest.raises(SystemExit) as e:
         FilterDate(future_date).__post_init__()
     assert str(e.value) == "Date cannot be in future"
+
 
 def test_filter_dates():
     """Test that a FilterDates object is initialized with the correct start and end dates."""
@@ -53,6 +60,7 @@ def test_filter_dates():
     assert filter_dates.start == start_date
     assert filter_dates.end == end_date
 
+
 def test_filter_dates_invalid():
     """Test that initializing FilterDates with an end date before the start date raises SystemExit."""
     # Given start and end date strings where the end date is before the start date
@@ -65,14 +73,48 @@ def test_filter_dates_invalid():
         FilterDates(start_date, end_date).__post_init__()
     assert str(e.value) == "End datetime cannot be before start datetime!"
 
-def test_get_default_filter_dates():
-    """Test that default filter dates are returned with the correct types."""
-    # When calling get_default_filter_dates
-    default_filter_dates = get_default_filter_dates()
 
-    # Then the start and end dates should be strings
-    assert isinstance(default_filter_dates.start.date, str)
-    assert isinstance(default_filter_dates.end.date, str)
+def test_get_default_filter_dates_monday():
+    """Test that default filter dates are returned with the correct types."""
+    # Set the current date to a Monday
+    current_date = datetime(2023, 10, 16)  # Monday
+    # Mock the datetime.now() to return the Monday date
+    with patch('filter_dates.datetime') as mock_datetime:
+        mock_datetime.now.return_value = current_date
+        # Mock the datetime.strptime() to return datetime object
+        mock_datetime.strptime.return_value = current_date
+        # Call the function and check the returned dates
+        filter_dates = get_default_filter_dates()
+
+        # Then the start and end dates should be strings
+        assert isinstance(filter_dates.start.date, str)
+        assert isinstance(filter_dates.end.date, str)
+
+        assert filter_dates.start.date == (
+            current_date - timedelta(days=3)).strftime("%d/%m/%Y 00:00")
+        assert filter_dates.end.date == current_date.strftime("%d/%m/%Y 00:00")
+
+
+def test_get_default_filter_dates_non_monday():
+    """Test that default filter dates are returned with the correct types."""
+    # Set the current date to a Tuesday
+    current_date = datetime(2023, 10, 17)
+    # Mock the datetime.now() to return the Tuesday date
+    with patch('filter_dates.datetime') as mock_datetime:
+        mock_datetime.now.return_value = current_date
+        # Mock the datetime.strptime() to return datetime object
+        mock_datetime.strptime.return_value = current_date
+        # Call the function and check the returned dates
+        filter_dates = get_default_filter_dates()
+
+        # Then the start and end dates should be strings
+        assert isinstance(filter_dates.start.date, str)
+        assert isinstance(filter_dates.end.date, str)
+
+        assert filter_dates.start.date == (
+            current_date - timedelta(days=1)).strftime("%d/%m/%Y 00:00")
+        assert filter_dates.end.date == current_date.strftime("%d/%m/%Y 00:00")
+
 
 def test_get_filter_dates_input_defaults(monkeypatch):
     """Test that default filter dates are used when no input is given."""
@@ -82,8 +124,10 @@ def test_get_filter_dates_input_defaults(monkeypatch):
 
     # When calling get_filter_dates_input
     # Then the resulting start and end dates should match the default values
-    assert filter_dates.start.date == (datetime.now() - timedelta(days=1)).strftime("%d/%m/%Y 00:00")
+    assert filter_dates.start.date == (
+        datetime.now() - timedelta(days=1)).strftime("%d/%m/%Y 00:00")
     assert filter_dates.end.date == datetime.now().strftime("%d/%m/%Y 00:00")
+
 
 def test_get_filter_dates_input_custom_values(monkeypatch):
     """Test that custom filter dates are used when input is given."""
@@ -95,4 +139,3 @@ def test_get_filter_dates_input_custom_values(monkeypatch):
     # Then the resulting start and end dates should match the custom values provided
     assert filter_dates.start.date == '01/01/2023 08:00'
     assert filter_dates.end.date == '01/01/2023 08:00'
-
