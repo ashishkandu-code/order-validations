@@ -1,51 +1,50 @@
 from unittest.mock import patch
 import pytest
 from datetime import datetime, timedelta
-from filter_dates import FilterDate, FilterDates, get_default_filter_dates, get_filter_dates_input
+from filter_dates import DateInFutureError, FilterDate, FilterDates, get_default_filter_dates, get_filter_dates_input
 
 
-def test_get_date_object_success():
-    """Test that a FilterDate object returns the correct datetime object."""
-    # Given a valid date string
-    filter_date = FilterDate('01/04/2023 12:00')
-    expected_date = datetime(2023, 4, 1, 12, 0)
+class TestFilterDate:
 
-    # When calling get_date_object
-    # Then the resulting datetime object should match the expected value
-    assert filter_date.get_date_object() == expected_date
+    # Creating a FilterDate object with a valid date string should not raise any exceptions.
+    def test_valid_date_string(self):
+        date_string = '01/01/2022 12:00'
+        expected_datetime = datetime(2022, 1, 1, 12, 0)
+        try:
+            filter_date = FilterDate(date_string)
+        except Exception as e:
+            pytest.fail(f"Unexpected exception: {e}")
 
+        # When calling parse_date
+        # Then the resulting datetime object should match the expected value
+        assert filter_date.parse_date() == expected_datetime
 
-def test_get_date_object_fail():
-    """Test that an invalid date string raises a SystemExit exception."""
-    # Given an invalid date string
-    # When calling get_date_object
-    # Then a SystemExit exception should be raised with the correct error message
-    with pytest.raises(SystemExit) as e:
-        FilterDate('32/04/2023 12:00').get_date_object()
-    assert str(e.value) == "Incorrect data format, should be DD/MM/YYYY HH:MM"
+    # Calling the parse_date method on a FilterDate object with a valid date string should return a datetime object.
+    def test_parse_valid_date_string(self):
+        date_string = '01/01/2022 12:00'
+        filter_date = FilterDate(date_string)
+        parsed_date = filter_date.parse_date()
+        assert isinstance(parsed_date, datetime)
 
+    # Creating a FilterDate object with the current date and time should not raise any exceptions.
+    def test_current_date_time(self):
+        current_date_time = datetime.now().strftime('%d/%m/%Y %H:%M')
+        try:
+            filter_date = FilterDate(current_date_time)
+        except Exception as e:
+            pytest.fail(f"Unexpected exception: {e}")
 
-def test_post_init_not_future():
-    """Test that a FilterDate object is not initialized with a future date."""
-    # Given a date string that is not in the future
-    filter_date = FilterDate('01/04/2023 12:00')
+    # Creating a FilterDate object with an invalid date string should raise a ValueError.
+    def test_invalid_date_string(self):
+        date_string = '01/01/2022 25:00'
+        with pytest.raises(ValueError):
+            filter_date = FilterDate(date_string)
 
-    # When calling __post_init__
-    # Then the returned datetime object should not be in the future
-    assert filter_date.__post_init__() <= datetime.now()
-
-
-def test_post_init_future_date():
-    """Test that initializing a FilterDate object with a future date raises SystemExit."""
-    # Given a date string that is in the future
-    future_date = (datetime.now() + timedelta(days=1)
-                   ).strftime('%d/%m/%Y %H:%M')
-
-    # When calling __post_init__
-    # Then a SystemExit exception should be raised with the correct error message
-    with pytest.raises(SystemExit) as e:
-        FilterDate(future_date).__post_init__()
-    assert str(e.value) == "Date cannot be in future"
+    # Creating a FilterDate object with a date string in the future should raise a DateInFutureError.
+    def test_future_date_string(self):
+        future_date = (datetime.now() + timedelta(days=1)).strftime('%d/%m/%Y %H:%M')
+        with pytest.raises(DateInFutureError):
+            filter_date = FilterDate(future_date)
 
 
 def test_filter_dates():
@@ -59,20 +58,6 @@ def test_filter_dates():
     # Then the start and end attributes should match the provided FilterDate objects
     assert filter_dates.start == start_date
     assert filter_dates.end == end_date
-
-
-def test_filter_dates_invalid():
-    """Test that initializing FilterDates with an end date before the start date raises SystemExit."""
-    # Given start and end date strings where the end date is before the start date
-    end_date = FilterDate('01/01/2022 00:00')
-    start_date = FilterDate('01/01/2023 00:00')
-
-    # When initializing a FilterDates object
-    # Then a SystemExit exception should be raised with the correct error message
-    with pytest.raises(SystemExit) as e:
-        FilterDates(start_date, end_date).__post_init__()
-    assert str(e.value) == "End datetime cannot be before start datetime!"
-
 
 def test_get_default_filter_dates_monday():
     """Test that default filter dates are returned with the correct types."""

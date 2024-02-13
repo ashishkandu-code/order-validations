@@ -66,6 +66,12 @@ class FilterDate:
         return self.date
 
 
+class EndBeforeStartError(Exception):
+    """
+    Custom exception raised when the end date is before the start date.
+    """
+    pass
+
 @dataclass
 class FilterDates:
     """
@@ -79,7 +85,11 @@ class FilterDates:
         __post_init__:
             Validates that the start date is before the end date.
             Raises:
-                SystemExit: If the end datetime is before the start datetime.
+                EndBeforeStartError: If the end datetime is before the start datetime.
+        validate_dates:
+            Validates that the start date is before the end date.
+            Raises:
+                EndBeforeStartError: If the end datetime is before the start datetime.
     """
 
     start: FilterDate
@@ -89,8 +99,16 @@ class FilterDates:
         """
         Validate that the end datetime is not before the start datetime.
         """
+        self.validate_dates()
+
+    def validate_dates(self):
+        """
+        Validates that the start date is before the end date.
+        Raises:
+            EndBeforeStartError: If the end datetime is before the start datetime.
+        """
         if self.start.parse_date() > self.end.parse_date():
-            raise SystemExit("End datetime cannot be before start datetime!")
+            raise EndBeforeStartError("End datetime cannot be before start datetime!")
 
 
 def get_default_filter_dates():
