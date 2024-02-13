@@ -1,5 +1,12 @@
+from dateutil import parser
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+
+class DateInFutureError(Exception):
+    """
+    Custom exception raised when the date is in the future.
+    """
+    pass
 
 @dataclass
 class FilterDate:
@@ -21,7 +28,12 @@ class FilterDate:
         validate_date:
             Validates that the date is not in the future.
             Raises:
-                ValueError: If the date is in the future.
+            DateInFutureError: If the date is in the future.
+
+        __str__:
+            Returns a human-readable representation of the object.
+            Returns:
+                str: The formatted date string.
     """
 
     date: str = field(default='', metadata={'type': 'str'})
@@ -35,15 +47,23 @@ class FilterDate:
     def validate_date(self):
         """
         Validate that the date is not in the future.
+        Raises:
+            DateInFutureError: If the date is in the future.
         """
         if self.parse_date() > datetime.now():
-            raise ValueError("Date cannot be in the future")
+            raise DateInFutureError("Date cannot be in the future")
 
     def __post_init__(self):
         """
         Initialize the object and validate the date.
         """
         self.validate_date()
+
+    def __str__(self):
+        """
+        Return a human-readable representation of the object.
+        """
+        return self.date
 
 
 @dataclass
