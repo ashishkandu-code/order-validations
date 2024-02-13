@@ -1,7 +1,7 @@
 from unittest.mock import patch
 import pytest
 from datetime import datetime, timedelta
-from filter_dates import DateInFutureError, FilterDate, FilterDates, get_default_filter_dates, get_filter_dates_input
+from filter_dates import DateInFutureError, EndBeforeStartError, FilterDate, FilterDates, get_default_filter_dates, get_filter_dates_input
 
 
 class TestFilterDate:
@@ -42,22 +42,36 @@ class TestFilterDate:
 
     # Creating a FilterDate object with a date string in the future should raise a DateInFutureError.
     def test_future_date_string(self):
-        future_date = (datetime.now() + timedelta(days=1)).strftime('%d/%m/%Y %H:%M')
+        future_date = (datetime.now() + timedelta(days=1)
+                       ).strftime('%d/%m/%Y %H:%M')
         with pytest.raises(DateInFutureError):
             filter_date = FilterDate(future_date)
 
 
-def test_filter_dates():
-    """Test that a FilterDates object is initialized with the correct start and end dates."""
-    # Given valid start and end date strings
-    start_date = FilterDate('01/01/2022 00:00')
-    end_date = FilterDate('01/01/2023 00:00')
-    filter_dates = FilterDates(start_date, end_date)
+class TestFilterDates:
 
-    # When initializing a FilterDates object
-    # Then the start and end attributes should match the provided FilterDate objects
-    assert filter_dates.start == start_date
-    assert filter_dates.end == end_date
+    # Creating an instance of FilterDates with valid start and end dates should not raise any exceptions.
+    def test_valid_start_end_dates(self):
+        start_date = FilterDate('01/01/2022 00:00')
+        end_date = FilterDate('02/01/2022 00:00')
+        filter_dates = FilterDates(start_date, end_date)
+        assert filter_dates.start == start_date
+        assert filter_dates.end == end_date
+
+    # Creating an instance of FilterDates with start and end dates that are equal should not raise any exceptions.
+    def test_equal_start_end_dates(self):
+        date = FilterDate('01/01/2022 00:00')
+        filter_dates = FilterDates(date, date)
+        assert filter_dates.start == date
+        assert filter_dates.end == date
+
+    # Creating an instance of FilterDates with start and end dates that are reversed should raise an EndBeforeStartError.
+    def test_reversed_start_end_dates(self):
+        start_date = FilterDate('01/01/2022 00:00')
+        end_date = FilterDate('31/12/2021 00:00')
+        with pytest.raises(EndBeforeStartError):
+            FilterDates(start_date, end_date)
+
 
 def test_get_default_filter_dates_monday():
     """Test that default filter dates are returned with the correct types."""

@@ -116,7 +116,7 @@ def get_default_filter_dates():
     Returns default filter dates for the current day or last Friday if today is Monday.
 
     This function provides a default start and end date for filtering. The start date is set to
-    the beginning of the previous day (or the previous Friday if today is Monday), and the
+    the beginning of the previous day (or the last Friday if today is Monday), and the
     end date is set to the beginning of the current day.
 
     Returns:
