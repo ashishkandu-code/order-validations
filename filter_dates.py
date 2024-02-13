@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 @dataclass
@@ -10,39 +10,40 @@ class FilterDate:
         date (str): The date in the format '%d/%m/%Y %H:%M'.
 
     Methods:
-        get_date_object:
+        parse_date:
             Parses the 'date' attribute into a datetime object.
             Returns:
                 datetime: The parsed datetime object.
 
             Raises:
-                SystemExit: If the input date format is incorrect.
+                ValueError: If the input date format is incorrect.
 
-        __post_init__:
-            Validates that the date is not in the future immediately after object initialization.
-            Returns:
-                datetime: The validated datetime object.
+        validate_date:
+            Validates that the date is not in the future.
+            Raises:
+                ValueError: If the date is in the future.
     """
 
-    date: str
+    date: str = field(default='', metadata={'type': 'str'})
 
-    def get_date_object(self):
+    def parse_date(self):
         """
         Return a datetime object parsed from the 'date' attribute.
         """
-        try:
-            return datetime.strptime(self.date, '%d/%m/%Y %H:%M')
-        except ValueError:
-            raise SystemExit("Incorrect data format, should be DD/MM/YYYY HH:MM")
+        return datetime.strptime(self.date, '%d/%m/%Y %H:%M')
 
-    def __post_init__(self):
+    def validate_date(self):
         """
         Validate that the date is not in the future.
         """
-        date_object = self.get_date_object()
-        if date_object > datetime.now():
-            raise SystemExit("Date cannot be in future")
-        return date_object
+        if self.parse_date() > datetime.now():
+            raise ValueError("Date cannot be in the future")
+
+    def __post_init__(self):
+        """
+        Initialize the object and validate the date.
+        """
+        self.validate_date()
 
 
 @dataclass
@@ -68,7 +69,7 @@ class FilterDates:
         """
         Validate that the end datetime is not before the start datetime.
         """
-        if self.start.get_date_object() > self.end.get_date_object():
+        if self.start.parse_date() > self.end.parse_date():
             raise SystemExit("End datetime cannot be before start datetime!")
 
 
