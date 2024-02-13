@@ -78,8 +78,8 @@ class ReportDownloader:
 class Report(ReportDownloader):
     def __init__(self, report_type: ReportType, filter_dates: FilterDates, save_to_disk: bool) -> None:
         super().__init__(
-            filter_date_from=filter_dates.start,
-            filter_date_to=filter_dates.end,
+            filter_date_from=filter_dates.start.date,
+            filter_date_to=filter_dates.end.date,
         )
         self.report_type = report_type
         self.save_to_disk = save_to_disk
