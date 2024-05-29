@@ -163,12 +163,16 @@ class WM(Session):
         logger.info(f"{response.request.method} /{id} [status:{response.status_code} request:{response.elapsed.total_seconds():.3f}s]")
         soup = BeautifulSoup(response.text, 'lxml')
         tbody = soup.find('tbody')
-        last_row = tbody.find_all('tr')[-1]
-        tds = last_row.find_all('td')
-        order_id = tds[2].text
-        interface_id = tds[4].text
-        order_status = tds[5].text
-        msg = tds[6].text
+        try:
+            last_row = tbody.find_all('tr')[-1]
+            tds = last_row.find_all('td')
+            order_id = tds[2].text
+            interface_id = tds[4].text
+            order_status = tds[5].text
+            msg = tds[6].text
+        except IndexError:
+            logger.error("Something went wrong, possible table was empty")
+            return None
         return WMOrder(order_id, interface_id, order_status, msg)
 
     def request(self, method, path, *args, **kwargs):

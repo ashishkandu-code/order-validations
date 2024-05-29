@@ -12,16 +12,30 @@ logger = LoggerFactory.get_logger(__name__)
 reports_dir = Path('reports')
 reports_dir.mkdir(parents=True, exist_ok=True)
 
-def dump_json_to_file(data: dict, filename: str):
-    """Helper to write dict to json."""
+def write_dict_to_json_file(data: dict, filename: str):
+    """
+    Helper to write a dictionary to a JSON file.
+
+    Parameters:
+        data (dict): The dictionary to be written to the JSON file.
+        filename (str): The name of the JSON file.
+
+    Returns:
+        None
+
+    Raises:
+        Exception: If there is an error while writing the dictionary to the JSON file.
+    """
     try:
-        filename = reports_dir / filename
-        with open(filename, 'w') as file:
+        filepath = reports_dir / filename
+
+        with open(filepath, 'w') as file:
             json.dump(data, file, indent=2)
-        logger.info(f'File {filename} dump success.')
+
+        logger.info(f'File {filepath} dump success.')
     except Exception as e:
         logger.error(str(e))
-        print(data)
+
 
 def write_to_file(text, filename: str):
     """Helper to write any string to a file"""
@@ -33,6 +47,7 @@ def write_to_file(text, filename: str):
     except Exception as e:
         logger.error(str(e))
         print(text)
+
 
 def write_bytes_to_file(bytes_text: bytes, filename: str):
     """
@@ -56,7 +71,8 @@ def current_milli_time():
 
 def save_json_data(data, report_name: str):
     try:
-        dump_json_to_file(data, f'{report_name}_{datetime.now().strftime("%m_%d_%Y-%H_%M_%S")}.json')
+        write_dict_to_json_file(
+            data, f'{report_name}_{datetime.now().strftime("%m_%d_%Y-%H_%M_%S")}.json')
     except Exception as e:
         logger.exception(e)
         write_to_file(data, f'{report_name}_error')

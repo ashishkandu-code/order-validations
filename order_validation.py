@@ -100,6 +100,8 @@ def order_processing(filter_dates: FilterDates, save_fetched_reports: bool):
             wm = WM()
             for order_id in order_ids:
                 order = wm.fetch(order_id)
+                if order is None:
+                    continue
                 if order.interface_log_ID == 'FAIL':
                     wm_failed_orders.append(order)
                 pbar.update(force=True)
